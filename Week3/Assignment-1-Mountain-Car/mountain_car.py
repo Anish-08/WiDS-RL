@@ -1,7 +1,7 @@
 import gymnasium as gym
 import numpy as np
 import matplotlib.pyplot as plt
-
+import random
 '''
 The first task to work with a gym env is to initialise it using gym.make(name_of_env) and reset it using .reset() function. This resets the env to a starting position, with some noise in state. It returns a tuple of the initial state of environment and a dictionary containing info (Not important for the moment).
 
@@ -67,7 +67,16 @@ class QAgent:
         
         Return a tuple containing the indices along each dimension
         '''
-        pass
+        indices = [0]*self.observation_space_size
+        for i in range(len(indices)):
+            x = 0
+            l = self.observation_space_low[i]
+            interval_size = (self.observation_space_high[i]-self.observation_space_low[i])/self.discrete_sizes[i]
+            while state[i]>l+interval_size:
+                x+=1
+                l+=interval_size
+            indices[i] = x
+        return indices
 
     def update(self, state, action, reward, next_state, is_terminal):
         '''
@@ -75,18 +84,39 @@ class QAgent:
         First discretize both the state and next_state to get indices in q-table.
         The boolean is_terminal here represents whether the state action pair resulted in termination (NOT TRUNCATION) of environment. In this case, update the value by considering max_a' q(s', a,) = 0 (consult theory for why) and not based on q-table.
         '''
+        state_dis = self.get_state_index(state)
+        
         if is_terminal:
-            pass
+            self.q_table[state_dis[0]][state_dis[1]][action] = (self.q_table[state_dis[0]][state_dis[1]][action])*(1-self.alpha) + self.alpha*reward
         else:
-            pass
+            next_state_dis = self.get_state_index(next_state)
+            max_rew = max(self.q_table[next_state_dis[0]][next_state_dis[1]][0],self.q_table[next_state_dis[0]][next_state_dis[1]][1],self.q_table[next_state_dis[0]][next_state_dis[1]][2])
+            self.q_table[state_dis[0]][state_dis[1]][action] = (self.q_table[state_dis[0]][state_dis[1]][action])*(1-self.alpha) + self.alpha*(reward + self.gamma*max_rew)
     
     def get_action(self):    
         '''
         Get the action either greedily, or randomly based on epsilon (You may use self.env.action_space.sample() to get a random action). Return an int representing action, based on self.state. Remember to discretize self.state first
         '''
-        pass
+        rand = random.random()
+        if rand<self.epsilon:
+            u = random.randint(0,2)
+        else:
+            u = self.greedy_action(self.state)
+        
+        return u
     
-    
+    def greedy_action(self, state):
+        u = 0
+        ind_state = self.get_state_index(state)
+        m = self.q_table[ind_state[0]][ind_state[1]][0]
+        if self.q_table[ind_state[0]][ind_state[1]][1]>m:
+            m = self.q_table[ind_state[0]][ind_state[1]][1]
+            u = 1
+        
+        if self.q_table[ind_state[0]][ind_state[1]][2]>m:
+            u = 2
+        return u
+
     def env_step(self):
         '''
         Takes a step in the environment and updated q-table
@@ -106,7 +136,8 @@ class QAgent:
         done = False
         eval_state = eval_env.reset()[0]
         while not done:
-            action = None # Take action based on greedy strategy now
+            #action = None # Take action based on greedy strategy now
+            action = self.greedy_action(eval_state)
             next_state, reward, terminated, truncated, info = eval_env.step(action)
             
             eval_env.render() #Renders the environment on a window.
@@ -124,6 +155,7 @@ class QAgent:
             
             self.epsilon = max(0, self.epsilon - self.epsilon_decay) #Update epsilon after every episode
             
+            print(episode)
             if episode % eval_intervals == 0:
                 #Check performance of agent
                 self.agent_eval()
